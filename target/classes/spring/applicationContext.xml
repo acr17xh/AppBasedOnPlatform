@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:mvc="http://www.springframework.org/schema/mvc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:context="http://www.springframework.org/schema/context" xmlns:p="http://www.springframework.org/schema/p"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:jpa="http://www.springframework.org/schema/data/jpa"
+	xmlns:elasticsearch="http://www.springframework.org/schema/data/elasticsearch"
+	xmlns:cache="http://www.springframework.org/schema/cache" xmlns:task="http://www.springframework.org/schema/task"
+	xmlns:jms="http://www.springframework.org/schema/jms"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+		http://www.springframework.org/schema/aop 
+	    http://www.springframework.org/schema/aop/spring-aop-4.0.xsd
+		http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee-4.0.xsd
+		http://www.springframework.org/schema/mvc  
+	    http://www.springframework.org/schema/mvc/spring-mvc-4.0.xsd
+	    http://www.springframework.org/schema/tx
+	    http://www.springframework.org/schema/tx/spring-tx-4.0.xsd
+	    http://www.springframework.org/schema/data/jpa
+        http://www.springframework.org/schema/data/jpa/spring-jpa-1.8.xsd
+        http://www.springframework.org/schema/data/elasticsearch        
+        http://www.springframework.org/schema/data/elasticsearch/spring-elasticsearch-1.0.xsd
+        http://www.springframework.org/schema/cache
+        http://www.springframework.org/schema/cache/spring-cache-4.0.xsd
+        http://www.springframework.org/schema/task 
+        http://www.springframework.org/schema/task/spring-task-4.0.xsd
+        http://www.springframework.org/schema/jms
+        http://www.springframework.org/schema/jms/spring-jms-3.0.xsd">
+
+
+
+
+	<!-- Spring 注解扫描 -->
+	<context:component-scan base-package="sheffield" />
+	<!-- 加载properties文件 -->
+	<bean id="propertyConfigurer"
+		class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+		<property name="locations">
+			<array>
+				<value>classpath:mybatis/jdbc.properties</value>
+				<value>classpath:redis/redis.properties</value>
+				<value>classpath:log4j.properties</value>
+			</array>
+		</property>
+		<property name="ignoreResourceNotFound" value="true"></property>
+	</bean>
+
+	<!-- ActiveMQ -->
+	<!-- <import resource="classpth:activemq/activemq.xml" /> -->
+	<!-- 真正可以产生Connection的ConnectionFactory，由对应的 JMS服务厂商提供 -->
+	<!-- <bean id="targetConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory"> 
+		<property name="brokerURL" value="tcp://localhost:61616" /> </bean> -->
+	<bean id="targetConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+		<property name="brokerURL"
+			value="ssl://b-8ca52d4d-a2c9-4cfd-aec9-e67d0d02c2e9-1.mq.ap-southeast-2.amazonaws.com:61617" />
+		<property name="userName" value="redfisky"></property>
+		<property name="password" value="123456789101112"></property>
+	</bean>
+
+	<!-- <bean id="pooledConnectionFactory" class="org.apache.activemq.jms.pool.PooledConnectionFactory"> 
+		<property name="connectionFactory" ref="targetConnectionFactory" /> <property 
+		name="maxConnections" value="10" /> </bean> -->
+
+	<!-- Spring用于管理真正的ConnectionFactory的ConnectionFactory -->
+	<!--<bean id="jmsconnectionFactory" class="org.springframework.jms.connection.CachingConnectionFactory"> 
+		<property name="targetConnectionFactory" ref="pooledConnectionFactory" /> 
+		<property name="sessionCacheSize" value="10" /> </bean> -->
+
+	<bean id="jmsconnectionFactory2"
+		class="org.springframework.jms.connection.SingleConnectionFactory">
+		<property name="targetConnectionFactory" ref="targetConnectionFactory" />
+	</bean>
+	<!-- Spring提供的JMS工具类，它可以进行消息发送、接收等 -->
+	<bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate">
+		<!-- 这个connectionFactory对应的是我们定义的Spring提供的那个ConnectionFactory对象 -->
+		<property name="connectionFactory" ref="jmsconnectionFactory2" />
+		<!-- 消息转换器 -->
+		<property name="messageConverter" ref="userMessageConverter" />
+	</bean>
+	<bean id="userMessageConverter" class="sheffield.activemq.UserMessageConverter"></bean>
+	<!--这个是队列目的地，点对点的 -->
+	<bean id="queueDestination" class="org.apache.activemq.command.ActiveMQQueue">
+		<constructor-arg>
+			<value>queue</value>
+		</constructor-arg>
+	</bean>
+	<!--这个是主题目的地，一对多的 -->
+	<bean id="topicDestination" class="org.apache.activemq.command.ActiveMQTopic">
+		<constructor-arg value="topic" />
+	</bean>
+	<!-- 消息监听器 -->
+	<bean id="consumerUserMessageListener" class="sheffield.activemq.ConsumerUserMessageListener" />
+	<!-- 消息监听容器 -->
+	<bean id="jmsContainer"
+		class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+		<property name="connectionFactory" ref="jmsconnectionFactory2" />
+		<property name="destination" ref="queueDestination" />
+		<property name="messageListener" ref="consumerUserMessageListener" />
+		<property name="sessionTransacted" value="true" />
+	</bean>
+
+	<!-- @Async配置 -->
+	<!-- 缺省的异步任务线程池 -->
+	<task:annotation-driven executor="asyncExecutor" />
+	<!-- <task:executor id="asyncExecutor" pool-size="100-10000" queue-capacity="10" 
+		/> -->
+	<task:executor id="asyncExecutor" />
+	<!-- <task:executor />配置参数： id：当配置多个executor时，被@Async("id")指定使用；也被作为线程名的前缀。 
+		pool-size： core size：最小的线程数，缺省：1 max size：最大的线程数，缺省：Integer.MAX_VALUE queue-capacity：当最小的线程数已经被占用满后， 
+		新的任务会被放进queue里面， 当这个queue的capacity也被占满之后， pool里面会创建新线程处理这个任务，直到总线程数达到了max 
+		size，这时系统会拒绝这个任务并抛出TaskRejectedException异常（缺省配置的情况下，可以通过rejection-policy来决定如何处理这种情况）。缺省值为：Integer.MAX_VALUE 
+		keep-alive：超过core size的那些线程，任务完成后，再经过这个时长（秒）会被结束掉 rejection-policy：当pool已经达到max 
+		size的时候，如何处理新任务 ABORT（缺省）：抛出TaskRejectedException异常，然后不执行 DISCARD：不执行，也不抛出异常 
+		DISCARD_OLDEST：丢弃queue中最旧的那个任务 CALLER_RUNS：不在新线程中执行任务，而是有调用者所在的线程来执行 -->
+
+
+	<!-- Mybatis -->
+	<bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="${driver}" />
+		<property name="url" value="${url}" />
+		<property name="username" value="${username}" />
+		<property name="password" value="${password}" />
+	</bean>
+	<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+		<property name="dataSource" ref="dataSource" />
+		<property name="mapperLocations" value="classpath:sheffield/mbg/mapper/*.xml"></property>
+		<!-- PageHelper -->
+		<property name="plugins">
+			<array>
+				<bean class="com.github.pagehelper.PageInterceptor">
+					<property name="properties">
+						<value>
+							helperDialect=mysql
+							reasonable=true
+						</value>
+					</property>
+				</bean>
+			</array>
+		</property>
+	</bean>
+	<!-- 配置扫描Dao接口包，动态实现Dao接口，注入到spring容器中 -->
+	<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<!-- 注入sqlSessionFactory -->
+		<property name="sqlSessionFactoryBeanName" value="sqlSessionFactory" />
+		<!-- 给出需要扫描Dao接口包 -->
+		<property name="basePackage" value="sheffield.mbg.dao" />
+	</bean>
+	<!-- 配置事务管理器 -->
+	<bean id="transactionManager"
+		class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<!-- 注入数据库连接池 -->
+		<property name="dataSource" ref="dataSource" />
+	</bean>
+	<!-- 配置基于注解的声明式事务 -->
+	<tx:annotation-driven transaction-manager="transactionManager" />
+	<!-- 扫描service包下所有使用注解的类型 -->
+	<context:component-scan base-package="sheffield.service" />
+
+
+	<!-- Redis配置 -->
+	<!-- 缓存管理器 -->
+	<cache:annotation-driven cache-manager="redisCacheManager" />
+	<bean id="redisCacheManager" class="org.springframework.data.redis.cache.RedisCacheManager">
+		<constructor-arg index="0" ref="redisTemplate2"></constructor-arg>
+		<!-- 设置缓存5分钟 -->
+		<property name="defaultExpiration" value="300"></property>
+		<property name="cacheNames">
+			<list>
+				<value>redisCacheManager</value>
+			</list>
+		</property>
+	</bean>
+
+	<bean id="redisconnectionFactory"
+		class="org.springframework.data.redis.connection.jedis.JedisConnectionFactory">
+		<property name="hostName" value="${redis.host}" />
+		<property name="port" value="${redis.port}" />
+		<property name="password" value="${redis.pass}" />
+		<property name="poolConfig" ref="poolConfig" />
+	</bean>
+	
+	<bean id="poolConfig" class="redis.clients.jedis.JedisPoolConfig">
+		<!--最大空闲数 -->
+		<property name="maxIdle" value="50" />
+		<!--最大连接数 -->
+		<property name="maxTotal" value="100" />
+		<!--最大等待时间 -->
+		<property name="maxWaitMillis" value="20000" />
+	</bean>
+	<!-- Serializer -->
+	<bean id="jdkSerializationRedisSerializer"
+		class="org.springframework.data.redis.serializer.JdkSerializationRedisSerializer" />
+	<bean id="stringRedisSerializer"
+		class="org.springframework.data.redis.serializer.StringRedisSerializer" />
+	<!-- redisTemplate -->
+
+	<bean id="redisTemplate" class="org.springframework.data.redis.core.RedisTemplate">
+		<property name="connectionFactory" ref="redisconnectionFactory" />
+		<property name="defaultSerializer" ref="stringRedisSerializer"></property>
+		<property name="keySerializer" ref="stringRedisSerializer" />
+		<property name="valueSerializer" ref="stringRedisSerializer" />
+	</bean>
+	<bean id="redisTemplate2" class="org.springframework.data.redis.core.RedisTemplate">
+		<property name="connectionFactory" ref="redisconnectionFactory" />
+		<property name="keySerializer" ref="jdkSerializationRedisSerializer" />
+		<property name="valueSerializer" ref="jdkSerializationRedisSerializer" />
+		<property name="defaultSerializer" ref="jdkSerializationRedisSerializer" />
+	</bean>
+	<bean id="redisTemplate3" class="org.springframework.data.redis.core.RedisTemplate">
+		<property name="connectionFactory" ref="redisconnectionFactory" />
+		<property name="defaultSerializer" ref="stringRedisSerializer"></property>
+		<property name="keySerializer" ref="stringRedisSerializer" />
+		<property name="valueSerializer" ref="stringRedisSerializer" />
+	</bean>
+
+	<!-- <property name="keySerializer" ref="jdkSerializationRedisSerializer" 
+		/> <property name="valueSerializer" ref="jdkSerializationRedisSerializer" 
+		/> <property name="defaultSerializer" ref="jdkSerializationRedisSerializer"></property> -->
+
+
+
+
+	<!-- Shiro 安全框架 -->
+	<bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+		<property name="securityManager" ref="securityManager" />
+		<!-- override these for application-specific URLs if you like: <property 
+			name="loginUrl" value="/login.jsp"/> <property name="successUrl" value="/home.jsp"/> 
+			<property name="unauthorizedUrl" value="/unauthorized.jsp"/> -->
+		<!-- The 'filters' property is not necessary since any declared javax.servlet.Filter 
+			bean -->
+		<!-- defined will be automatically acquired and available via its beanName 
+			in chain -->
+		<!-- definitions, but you can perform instance overrides or name aliases 
+			here if you like: -->
+		<!-- <property name="filters"> <util:map> <entry key="anAlias" value-ref="someFilter"/> 
+			</util:map> </property> -->
+		<property name="unauthorizedUrl" value="/view/entry2.jsp"></property>
+		<property name="loginUrl" value="/view/entry2.jsp"></property>
+		<property name="successUrl" value="/view/entry2.jsp"></property>
+		<property name="filterChainDefinitionMap" ref="filterChainDefinitionMap"></property>
+		<!--<property name="filterChainDefinitions"> <value> # some example chain 
+			definitions: /admin/** = authc, roles[admin] /docs/** = authc, perms[document:read] 
+			/** = anon # more URL-to-FilterChain definitions here </value> </property> -->
+	</bean>
+	<bean id="filterChainDefinitionMapBuilder" class="sheffield.shiro.MyFilterChainDefinitionMapBuilder"></bean>
+	<bean id="filterChainDefinitionMap" factory-bean="filterChainDefinitionMapBuilder"
+		factory-method="buildFilterChainDefinitionMap"></bean>
+
+	<!-- Define any javax.servlet.Filter beans you want anywhere in this application 
+		context. -->
+	<!-- They will automatically be acquired by the 'shiroFilter' bean above 
+		and made available -->
+	<!-- to the 'filterChainDefinitions' property. Or you can manually/explicitly 
+		add them -->
+	<!-- to the shiroFilter's 'filters' Map if desired. See its JavaDoc for 
+		more details. -->
+	<!-- <bean id="someFilter" class="..." /> <bean id="anotherFilter" class="..."> 
+		... </bean> ... -->
+	<bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+		<!-- Single realm app. If you have multiple realms, use the 'realms' property 
+			instead. -->
+		<!-- <property name="realm" ref="myRealm" /> -->
+		<!-- By default the servlet container sessions will be used. Uncomment 
+			this line to use shiro's native sessions (see the JavaDoc for more): -->
+		<!-- <property name="sessionMode" value="native"/> -->
+		<!-- <property name="rememberMeManager.cookie.maxAge" value="2764800"></property> -->
+		<property name="authenticator" ref="authenticator"></property>
+		<property name="realms">
+			<list>
+				<ref bean="Realm2"></ref>
+			</list>
+		</property>
+		<!-- <property name="sessionManager" ref="sessionManager"></property> -->
+	</bean>
+
+	<bean
+		class="org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator"
+		depends-on="lifecycleBeanPostProcessor" />
+
+	<bean
+		class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor">
+		<property name="securityManager" ref="securityManager" />
+	</bean>
+
+	<bean id="secureRemoteInvocationExecutor"
+		class="org.apache.shiro.spring.remoting.SecureRemoteInvocationExecutor">
+		<property name="securityManager" ref="securityManager" />
+	</bean>
+
+	<bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor" />
+	<!-- Define the Shiro Realm implementation you want to use to connect to 
+		your back-end -->
+
+	<!-- security datasource: -->
+	<bean id="Realm2" class="sheffield.shiro.Realm2">
+		<property name="credentialsMatcher">
+			<bean class="org.apache.shiro.authc.credential.HashedCredentialsMatcher">
+				<property name="hashAlgorithmName" value="MD5"></property>
+				<property name="hashIterations" value="5"></property>
+			</bean>
+		</property>
+	</bean>
+
+	<!-- Multiple realms -->
+	<bean id="authenticator" class="org.apache.shiro.authc.pam.ModularRealmAuthenticator">
+		<property name="authenticationStrategy">
+			<bean class="org.apache.shiro.authc.pam.AtLeastOneSuccessfulStrategy"></bean>
+		</property>
+	</bean>
+
+	<!-- Session 会话管理 -->
+	<!-- <bean id="sessionIdGenerator" class="org.apache.shiro.session.mgt.eis.JavaUuidSessionIdGenerator"></bean> 
+		<bean id="MySessionDAO" class="sheffield.shiro.MySessionDAO"> <property name="sessionIdGenerator" 
+		ref="sessionIdGenerator"></property> <property name="activeSessionsCacheName" 
+		value="shiro-activeSessionCache"></property> </bean> -->
+
+
+	<!-- 配置Session DAO的操作处理 -->
+	<!-- 设置session缓存的名字，这个名字可以任意 -->
+	<!-- 定义该Session DAO操作中所使用的ID生成器 -->
+	<!--<bean id="sessionDAO" class="org.apache.shiro.session.mgt.eis.EnterpriseCacheSessionDAO"> 
+		<property name="activeSessionsCacheName" value="shiro-activeSessionCache" 
+		/> <property name="sessionIdGenerator" ref="sessionIdGenerator" /> </bean> -->
+
+
+	<!-- 配置需要向Cookie中保存数据的配置模版 -->
+	<!-- 在Tomcat运行下默认使用的Cookie的名字为JSESSIONID -->
+	<!-- 保证该系统不会受到跨域的脚本操作供给 -->
+	<!-- 定义Cookie的过期时间，单位为秒，如果设置为-1表示浏览器关闭，则Cookie消失 -->
+	<!-- <bean id="sessionIdCookie" class="org.apache.shiro.web.servlet.SimpleCookie"> 
+		<constructor-arg value="mldn-session-id" /> <property name="httpOnly" value="true" 
+		/> <property name="maxAge" value="-1" /> </bean> -->
+
+	<!-- <bean id="sessionManager" class="org.apache.shiro.session.mgt.DefaultSessionManager"> 
+		<property name="globalSessionTimeout" value="1800000"></property> <property 
+		name="deleteInvalidSessions" value="true"></property> <property name="sessionValidationSchedulerEnabled" 
+		value="true"></property> <property name="sessionDAO" ref="sessionDAO"></property> 
+		<property name="cacheManager" ref="cacheManager"></property> </bean> <bean 
+		id="cacheManager" class="org.apache.shiro.cache.ehcache.EhCacheManager"> 
+		<property name="cacheManagerConfigFile" value="classpath:shiro/ehcache-shiro.xml" 
+		/> </bean> -->
+
+	<!-- Spring data elasticsearch 搜索工具 -->
+	<!-- 暂时不启用，因为repository bean无法加载 -->
+	<!-- <elasticsearch:transport-client id="client" cluster-name="elasticsearch" 
+		cluster-nodes="127.0.0.1:9300" client-transport-sniff="false" /> <elasticsearch:repositories 
+		base-package="sheffield.elasticsearch.repository" elasticsearch-template-ref="elasticsearchTemplate" 
+		/> <bean id="elasticsearchTemplate" name="elasticsearchTemplate" class="org.springframework.data.elasticsearch.core.ElasticsearchTemplate"> 
+		<constructor-arg name="client" ref="client" /> </bean> -->
+
+
+</beans>
+
