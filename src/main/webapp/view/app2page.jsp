@@ -91,7 +91,8 @@
 
         function initMap() {
             map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 15,
+                center:{lat:53.3810000,lng:-1.4790000},
+                zoom: 14,
 				styles:[
                     {
                         "elementType": "geometry",
@@ -335,40 +336,46 @@
             });
 
             //获取当前设备所在地区位置
-            var infoWindow = new google.maps.InfoWindow({map: map});
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(function(position) {
-                    var pos = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude
-                    };
-                    infoWindow.setPosition(pos);
-                    infoWindow.setContent('You are here man');
-                    map.setCenter(pos);
-
-                    //LatLng Object
-                    var initialLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
-                    //give lat and lng to lag_search and lng_search
-					lat1 = initialLocation.lat().toString();
-                    lng1 = initialLocation.lng().toString();
-//                    lat_display = initialLocation.lat().toFixed(2).toString();
-//                    lng_display = initialLocation.lng().toFixed(2).toString();
-
-                }, function() {
-                    handleLocationError(true, infoWindow, map.getCenter());
-                });
-            } else {
-                // Browser doesn't support Geolocation
-                handleLocationError(false, infoWindow, map.getCenter());
-            }
-            //定位异常处理程序
-            function handleLocationError(browserHasGeolocation, infoWindow, pos) {
-                infoWindow.setPosition(pos);
-                infoWindow.setContent(browserHasGeolocation ?
-                    'Error: The Geolocation service failed.' :
-                    'Error: Your browser doesn\'t support geolocation.');
-            }
+//            var infoWindow = new google.maps.InfoWindow({map: map});
+//            if (navigator.geolocation) {
+//                navigator.geolocation.getCurrentPosition(function(position) {
+//                    var pos = {
+//                        lat: position.coords.latitude,
+//                        lng: position.coords.longitude
+//                    };
+//                    infoWindow.setPosition(pos);
+//                    infoWindow.setContent('You are here man');
+//                    map.setCenter(pos);
+//
+//                    //LatLng Object
+//                    var initialLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+//                    //give lat and lng to lag_search and lng_search
+//
+//
+////					  lat1 = initialLocation.lat().toString(); 部署不可用。。。
+////                    lng1 = initialLocation.lng().toString();
+//
+//
+////                    lat_display = initialLocation.lat().toFixed(2).toString();
+////                    lng_display = initialLocation.lng().toFixed(2).toString();
+//
+//                }, function() {
+//                    handleLocationError(true, infoWindow, map.getCenter());
+//                });
+//            } else {
+//                // Browser doesn't support Geolocation
+//                handleLocationError(false, infoWindow, map.getCenter());
+//            }
+//            定位异常处理程序
+//            function handleLocationError(browserHasGeolocation, infoWindow, pos) {
+//                infoWindow.setPosition(pos);
+//                infoWindow.setContent(browserHasGeolocation ?
+//                    'Error: The Geolocation service failed.' :
+//                    'Error: Your browser doesn\'t support geolocation.');
+//            }
         }
+        lat1 = 53.3810000; lat1 = lat1.toString();
+        lng1 =-1.4790000; lng1 = lng1.toString();
 
         //JQuery begin to manipulate AJAX
         $(document).ready(function () {
